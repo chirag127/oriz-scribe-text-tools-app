@@ -1,18 +1,34 @@
-# Oriz Scribe — Text + Writing Tools
+# Oriz Scribe — Text tools
 
-Text manipulation and writing tools for [Oriz](https://oriz.in).
+> Text manipulation and writing tools under the Scribe product brand of the Oriz family.
 
-**Brand:** Scribe (writing / text manipulation)
-**Live:** https://text.oriz.in
+**Live at**: <https://text.oriz.in> · **Status**: scaffold
 
-## Stack
+## What this is
 
-- [Astro 6](https://astro.build) — content + island architecture
-- [React 19](https://react.dev) — interactive islands
-- [Tailwind CSS v4](https://tailwindcss.com) — styling
-- [@chirag127/astro-shell](https://github.com/chirag127/astro-shell) — app shell
-- [@chirag127/astro-chrome](https://github.com/chirag127/astro-chrome) — header / nav chrome
+Browser-based text manipulation and writing utilities. Case conversion, diffing, counting, formatting, and other text transforms — one unified surface for every text-shaped task.
+
+## Per-feature inventory
+
+| Feature    | Status     |
+| ---------- | ---------- |
+| (none yet) | 📜 planned |
+
+## App-specific env vars
+
+None beyond the family-wide set at `templates/.env.example`.
+
+## Local dev
+
+```bash
+# from the workspace root (c:/D/oriz)
+pnpm -F oriz-scribe-text-tools-app dev
+```
+
+## Knowledge
+
+See [`./knowledge/`](./knowledge/) for app-specific decisions, runbooks, and services. Family rules / decisions / architecture live at the master repo's [`knowledge/`](../../../../knowledge/).
 
 ## License
 
-Source-available, all rights reserved. See [LICENSE](./LICENSE).
+Source-available, all rights reserved. See master [`LICENSE`](../../../../LICENSE) — same terms across the family.
