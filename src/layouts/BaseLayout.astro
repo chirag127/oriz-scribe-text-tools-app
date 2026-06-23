@@ -1,5 +1,6 @@
 ---
 import '~/styles/global.css'
+import { pricingUrl } from '@chirag127/astro-shell/pricing-url'
 
 interface Props {
   title?: string
@@ -34,8 +35,8 @@ const canonical = new URL(Astro.url.pathname, 'https://text.oriz.in').toString()
       <nav>
         <a href="/">tools</a>
         <a href="/about/">about</a>
-        <a href="/pricing/">pricing</a>
-        <a href="https://auth.oriz.in/sign-in">sign in</a>
+        <a href={pricingUrl('oriz-scribe-text-tools-app')}>pricing</a>
+        <a href="https://account.oriz.in/sign-in?return=https://text.oriz.in/">sign in</a>
       </nav>
     </header>
     <main id="main"><slot /></main>
