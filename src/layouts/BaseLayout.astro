@@ -1,6 +1,7 @@
 ---
 import '~/styles/global.css'
 import { pricingUrl } from '@chirag127/astro-shell/pricing-url'
+import FamilySidebar from '@chirag127/astro-shell/components/FamilySidebar.astro'
 
 interface Props {
   title?: string
@@ -39,7 +40,24 @@ const canonical = new URL(Astro.url.pathname, 'https://text.oriz.in').toString()
         <a href="https://account.oriz.in/sign-in?return=https://text.oriz.in/">sign in</a>
       </nav>
     </header>
-    <main id="main"><slot /></main>
+    <div class="oriz-shell">
+      <FamilySidebar slug="oriz-scribe-text-tools-app" title="Text Tools">
+        <a slot="tools" href="/tools/case-convert/">Case converter</a>
+        <a slot="tools" href="/tools/counter/">Counter</a>
+        <a slot="tools" href="/tools/find-replace/">Find &amp; replace</a>
+        <a slot="tools" href="/tools/text-diff/">Text diff</a>
+        <a slot="tools" href="/tools/text-sorter/">Text sorter</a>
+        <a slot="tools" href="/tools/lorem-ipsum/">Lorem ipsum</a>
+        <a slot="tools" href="/tools/markdown/">Markdown preview</a>
+        <a slot="tools" href="/tools/readability/">Readability</a>
+        <a slot="tools" href="/tools/unicode-inspector/">Unicode inspector</a>
+        <a slot="tools" href="/tools/regex/">Regex tester</a>
+        <a slot="tools" href="/tools/ascii-art/">ASCII art</a>
+        <a slot="tools" href="/tools/faker/">Fake data</a>
+        <a slot="tools" href="/tools/latex/">LaTeX preview</a>
+      </FamilySidebar>
+      <main id="main" class="oriz-main"><slot /></main>
+    </div>
     <footer class="site">
       <span>Oriz Text Tools · part of the <a href="https://oriz.in">oriz</a> family · runs in your browser</span>
       <span>

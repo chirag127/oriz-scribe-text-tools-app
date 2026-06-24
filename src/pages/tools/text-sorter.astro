@@ -1,0 +1,139 @@
+---
+import BaseLayout from '~/layouts/BaseLayout.astro'
+---
+<BaseLayout title="Text Sorter — Oriz Text Tools" description="Sort lines alphabetically, numerically, or by length. Deduplicate lines. All client-side.">
+  <article class="tool">
+    <p class="back mono"><a href="/">← all tools</a></p>
+    <h1 class="h1">text sorter</h1>
+    <p class="status mono ready">ready · v0.1</p>
+
+    <div class="layout">
+      <div class="input-pane">
+        <label class="pane-label mono" for="sort-input">input (one item per line)</label>
+        <textarea id="sort-input" class="io" rows="16" placeholder="paste lines here…" spellcheck="false"></textarea>
+        <div class="controls">
+          <div class="btn-group">
+            <button class="btn" data-sort="alpha-asc">A → Z</button>
+            <button class="btn" data-sort="alpha-desc">Z → A</button>
+            <button class="btn" data-sort="num-asc">0 → 9</button>
+            <button class="btn" data-sort="num-desc">9 → 0</button>
+            <button class="btn" data-sort="len-asc">shortest first</button>
+            <button class="btn" data-sort="len-desc">longest first</button>
+            <button class="btn" data-sort="random">shuffle</button>
+          </div>
+          <label class="flag-label"><input type="checkbox" id="sort-dedup" /> deduplicate</label>
+          <label class="flag-label"><input type="checkbox" id="sort-trim" checked /> trim lines</label>
+          <label class="flag-label"><input type="checkbox" id="sort-skip-empty" checked /> skip empty lines</label>
+        </div>
+      </div>
+      <div class="output-pane">
+        <div class="pane-label mono">output <span id="sort-info" class="hint"></span></div>
+        <textarea id="sort-output" class="io" rows="16" readonly placeholder="sorted lines appear here…"></textarea>
+        <button class="copy-btn" id="sort-copy">copy</button>
+      </div>
+    </div>
+  </article>
+</BaseLayout>
+
+<script>
+  const inputEl = document.getElementById('sort-input') as HTMLTextAreaElement;
+  const outputEl = document.getElementById('sort-output') as HTMLTextAreaElement;
+  const dedupEl = document.getElementById('sort-dedup') as HTMLInputElement;
+  const trimEl = document.getElementById('sort-trim') as HTMLInputElement;
+  const skipEmptyEl = document.getElementById('sort-skip-empty') as HTMLInputElement;
+  const infoEl = document.getElementById('sort-info') as HTMLElement;
+  const copyBtn = document.getElementById('sort-copy') as HTMLButtonElement;
+
+  function parseLines(): string[] {
+    let lines = inputEl.value.split('\n');
+    if (trimEl.checked) lines = lines.map(l => l.trim());
+    if (skipEmptyEl.checked) lines = lines.filter(l => l !== '');
+    if (dedupEl.checked) lines = [...new Set(lines)];
+    return lines;
+  }
+
+  function sort(mode: string) {
+    let lines = parseLines();
+    switch (mode) {
+      case 'alpha-asc':  lines.sort((a, b) => a.localeCompare(b)); break;
+      case 'alpha-desc': lines.sort((a, b) => b.localeCompare(a)); break;
+      case 'num-asc':    lines.sort((a, b) => parseFloat(a) - parseFloat(b)); break;
+      case 'num-desc':   lines.sort((a, b) => parseFloat(b) - parseFloat(a)); break;
+      case 'len-asc':    lines.sort((a, b) => a.length - b.length); break;
+      case 'len-desc':   lines.sort((a, b) => b.length - a.length); break;
+      case 'random':     lines.sort(() => Math.random() - 0.5); break;
+    }
+    outputEl.value = lines.join('\n');
+    infoEl.textContent = `${lines.length} line(s)`;
+  }
+
+  document.querySelectorAll('.btn[data-sort]').forEach(btn => {
+    btn.addEventListener('click', () => sort((btn as HTMLElement).dataset.sort ?? ''));
+  });
+
+  copyBtn.addEventListener('click', async () => {
+    if (!outputEl.value) return;
+    await navigator.clipboard.writeText(outputEl.value);
+    copyBtn.textContent = 'copied!';
+    setTimeout(() => { copyBtn.textContent = 'copy'; }, 1500);
+  });
+</script>
+
+<style>
+  .tool { padding-block: 0 2rem; }
+  .back { font-size: 12px; margin: 0 0 2rem; }
+  .back a { color: var(--muted); text-decoration: none; }
+  .back a:hover { color: var(--ink); }
+  .h1 { font-family: var(--font-display); font-weight: 600; font-size: clamp(1.75rem, 4vw, 2.5rem); margin: 0 0 0.5rem; line-height: 1.1; }
+  .status { font-size: 11px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin: 0 0 2rem; }
+  .status.ready { color: var(--accent); }
+  .pane-label { font-size: 10px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 0.5rem; display: block; }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+  @media (min-width: 700px) { .layout { grid-template-columns: 1fr 1fr; align-items: start; } }
+
+  .io {
+    width: 100%;
+    padding: 1rem;
+    background: var(--paper-2);
+    border: 1px solid var(--rule);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    resize: vertical;
+    min-height: 280px;
+  }
+
+  .controls { margin-top: 0.75rem; display: flex; flex-direction: column; gap: 0.75rem; }
+  .btn-group { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .btn {
+    padding: 0.3rem 0.75rem;
+    background: var(--paper-2);
+    border: 1px solid var(--rule);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    cursor: pointer;
+    transition: background 100ms;
+  }
+  .btn:hover { background: var(--accent); color: var(--paper); border-color: var(--accent); }
+  .flag-label { font-family: var(--font-mono); font-size: 0.8125rem; color: var(--muted); display: flex; align-items: center; gap: 0.3rem; cursor: pointer; }
+  .hint { color: var(--muted); font-family: var(--font-mono); font-size: 10px; }
+
+  .copy-btn {
+    margin-top: 0.5rem;
+    padding: 0.375rem 1rem;
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    cursor: pointer;
+    transition: background 100ms, color 100ms;
+  }
+  .copy-btn:hover { background: var(--accent); color: var(--paper); }
+</style>

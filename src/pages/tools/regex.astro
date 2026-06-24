@@ -1,17 +1,103 @@
 ---
 import BaseLayout from '~/layouts/BaseLayout.astro'
 ---
-<BaseLayout title="regex tester — Oriz Text Tools" description="regex tester — runs in your browser. Part of Oriz Text Tools.">
+<BaseLayout title="Regex tester — Oriz Text Tools" description="Test JavaScript regular expressions live with match highlighting and capture groups. Client-side only.">
   <article class="tool">
     <p class="back mono"><a href="/">← all tools</a></p>
     <h1 class="h1">regex tester</h1>
-    <p class="status mono">coming · v0.1</p>
-    <p class="lede">
-      This feature is on the v0.1 roadmap. The page exists so we can iterate on
-      the design and copy in parallel; the implementation lands next sprint.
-    </p>
+    <p class="status mono ready">ready · v0.1</p>
+    <p class="lede">Live regex tester using the JavaScript engine. Matches highlight in the haystack and groups appear below. Nothing leaves your browser.</p>
+
+    <div class="row">
+      <span class="slash mono">/</span>
+      <input id="rx-pattern" class="io single" spellcheck="false" placeholder="pattern" value="(\\w+)@(\\w+\\.\\w+)" />
+      <span class="slash mono">/</span>
+      <input id="rx-flags" class="io single flags" spellcheck="false" placeholder="flags" value="gi" />
+    </div>
+    <p id="rx-error" class="err mono" hidden></p>
+
+    <label class="pane-label mono" for="rx-input">haystack</label>
+    <textarea id="rx-input" class="io" rows="10" spellcheck="false">Contact us at hello@oriz.in or support@example.com. Visit https://oriz.in for more.</textarea>
+
+    <div class="pane-label mono">matches <span id="rx-count" class="badge"></span></div>
+    <div id="rx-highlight" class="io pre highlight" aria-live="polite"></div>
+
+    <div class="pane-label mono">capture groups</div>
+    <div id="rx-groups" class="io groups">no matches</div>
   </article>
 </BaseLayout>
+
+<script>
+  const pattern = document.getElementById('rx-pattern') as HTMLInputElement;
+  const flags = document.getElementById('rx-flags') as HTMLInputElement;
+  const input = document.getElementById('rx-input') as HTMLTextAreaElement;
+  const err = document.getElementById('rx-error') as HTMLElement;
+  const count = document.getElementById('rx-count') as HTMLElement;
+  const hl = document.getElementById('rx-highlight') as HTMLElement;
+  const groups = document.getElementById('rx-groups') as HTMLElement;
+
+  function esc(s: string): string {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function run() {
+    err.hidden = true;
+    let f = flags.value;
+    if (!f.includes('g')) f += 'g';
+    let re: RegExp;
+    try {
+      re = new RegExp(pattern.value, f);
+    } catch (e) {
+      err.hidden = false;
+      err.textContent = (e as Error).message;
+      hl.innerHTML = esc(input.value);
+      count.textContent = '';
+      groups.textContent = 'invalid pattern';
+      return;
+    }
+    const text = input.value;
+    const matches: RegExpExecArray[] = [];
+    let m: RegExpExecArray | null;
+    let guard = 0;
+    while ((m = re.exec(text)) !== null) {
+      matches.push(m);
+      if (m[0] === '') re.lastIndex++;
+      if (++guard > 10000) break;
+    }
+    count.textContent = `${matches.length} match${matches.length === 1 ? '' : 'es'}`;
+    // highlight
+    let out = '';
+    let pos = 0;
+    for (const mm of matches) {
+      out += esc(text.slice(pos, mm.index));
+      out += `<mark>${esc(mm[0])}</mark>`;
+      pos = mm.index + mm[0].length;
+    }
+    out += esc(text.slice(pos));
+    hl.innerHTML = out || '&nbsp;';
+    // groups
+    if (matches.length === 0) {
+      groups.textContent = 'no matches';
+    } else {
+      const lines: string[] = [];
+      matches.forEach((mm, i) => {
+        lines.push(`<div class="g-match">match ${i + 1} @ ${mm.index}: <code>${esc(mm[0])}</code></div>`);
+        for (let g = 1; g < mm.length; g++) {
+          lines.push(`<div class="g-grp">  $${g}: <code>${esc(String(mm[g] ?? ''))}</code></div>`);
+        }
+        if (mm.groups) {
+          for (const [k, v] of Object.entries(mm.groups)) {
+            lines.push(`<div class="g-grp">  ?&lt;${esc(k)}&gt;: <code>${esc(String(v ?? ''))}</code></div>`);
+          }
+        }
+      });
+      groups.innerHTML = lines.join('');
+    }
+  }
+
+  [pattern, flags, input].forEach(el => el.addEventListener('input', run));
+  run();
+</script>
 
 <style>
   .tool { padding-block: 0 2rem; }
@@ -19,20 +105,22 @@ import BaseLayout from '~/layouts/BaseLayout.astro'
   .back a { color: var(--muted); text-decoration: none; }
   .back a:hover { color: var(--ink); }
   .h1 { font-family: var(--font-display); font-weight: 600; font-size: clamp(1.75rem, 4vw, 2.5rem); margin: 0 0 0.5rem; line-height: 1.1; }
-  .status { font-size: 11px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin: 0 0 2rem; }
+  .status { font-size: 11px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin: 0 0 1rem; }
   .status.ready { color: var(--accent); }
-  .lede { font-size: 1rem; color: var(--muted); line-height: 1.6; max-width: 56ch; }
-  .placeholder { max-width: 60ch; }
-  .placeholder p { color: var(--muted); margin: 0 0 1rem; }
-  .io {
-    width: 100%;
-    padding: 1rem;
-    background: var(--paper-2);
-    border: 1px solid var(--rule);
-    color: var(--ink);
-    font-family: var(--font-mono);
-    font-size: 0.875rem;
-    resize: vertical;
-  }
-  .hint { font-size: 11px; color: var(--muted); margin-top: 0.75rem; }
+  .lede { font-size: 1rem; color: var(--muted); line-height: 1.6; max-width: 60ch; margin: 0 0 2rem; }
+  .row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
+  .slash { color: var(--muted); font-size: 1.25rem; }
+  .pane-label { font-size: 10px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin: 1.25rem 0 0.5rem; display: flex; gap: 0.5rem; align-items: center; }
+  .badge { color: var(--accent); }
+  .io { width: 100%; padding: 0.75rem 1rem; background: var(--paper-2); border: 1px solid var(--rule); color: var(--ink); font-family: var(--font-mono); font-size: 0.875rem; box-sizing: border-box; }
+  .io.single { padding: 0.5rem 0.75rem; }
+  .flags { max-width: 90px; }
+  .io.pre { white-space: pre-wrap; word-break: break-word; min-height: 80px; }
+  .highlight mark { background: var(--accent); color: var(--paper); padding: 0 2px; }
+  .groups { font-size: 0.8125rem; }
+  .groups .g-match { margin-top: 0.5rem; color: var(--ink); }
+  .groups .g-match:first-child { margin-top: 0; }
+  .groups .g-grp { color: var(--muted); }
+  .groups code { font-family: var(--font-mono); color: var(--accent); }
+  .err { color: #c1440e; font-size: 12px; margin: 0.25rem 0 0.75rem; }
 </style>

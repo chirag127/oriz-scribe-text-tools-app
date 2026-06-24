@@ -1,29 +1,128 @@
 ---
 import BaseLayout from '~/layouts/BaseLayout.astro'
 ---
-<BaseLayout title="side-by-side diff — Oriz Text Tools" description="side-by-side diff — runs in your browser. Part of Oriz Text Tools.">
-  <article class="tool">
+<BaseLayout title="Text Diff — Oriz Text Tools" description="Paste two texts and highlight additions and deletions side by side. All client-side.">
+  <article class="tool wide">
     <p class="back mono"><a href="/">← all tools</a></p>
-    <h1 class="h1">side-by-side diff</h1>
-    <p class="status mono">coming · v0.1</p>
-    <p class="lede">
-      This feature is on the v0.1 roadmap. The page exists so we can iterate on
-      the design and copy in parallel; the implementation lands next sprint.
-    </p>
+    <h1 class="h1">text diff</h1>
+    <p class="status mono ready">ready · v0.1</p>
+
+    <div class="inputs-row">
+      <div class="input-pane">
+        <label class="pane-label mono" for="diff-left">original (left)</label>
+        <textarea id="diff-left" class="io" rows="12" placeholder="paste original text…" spellcheck="false"></textarea>
+      </div>
+      <div class="input-pane">
+        <label class="pane-label mono" for="diff-right">modified (right)</label>
+        <textarea id="diff-right" class="io" rows="12" placeholder="paste modified text…" spellcheck="false"></textarea>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <button class="btn" id="diff-run">compare</button>
+      <button class="btn" id="diff-clear">clear</button>
+      <label class="toggle-label">
+        <input type="checkbox" id="diff-word-level" checked /> word-level diff
+      </label>
+    </div>
+
+    <div id="diff-output" class="diff-output" aria-live="polite">
+      <span class="hint mono">click compare to see the diff</span>
+    </div>
   </article>
 </BaseLayout>
 
+<script>
+  // Simple LCS-based diff (word or line granularity)
+  type DiffOp = { op: 'eq' | 'del' | 'ins'; text: string };
+
+  function lcs(a: string[], b: string[]): number[][] {
+    const m = a.length, n = b.length;
+    const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+    for (let i = 1; i <= m; i++)
+      for (let j = 1; j <= n; j++)
+        dp[i][j] = a[i - 1] === b[j - 1] ? dp[i - 1][j - 1] + 1 : Math.max(dp[i - 1][j], dp[i][j - 1]);
+    return dp;
+  }
+
+  function diff(a: string[], b: string[]): DiffOp[] {
+    const dp = lcs(a, b);
+    const ops: DiffOp[] = [];
+    let i = a.length, j = b.length;
+    while (i > 0 || j > 0) {
+      if (i > 0 && j > 0 && a[i - 1] === b[j - 1]) {
+        ops.push({ op: 'eq', text: a[i - 1] });
+        i--; j--;
+      } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+        ops.push({ op: 'ins', text: b[j - 1] });
+        j--;
+      } else {
+        ops.push({ op: 'del', text: a[i - 1] });
+        i--;
+      }
+    }
+    return ops.reverse();
+  }
+
+  function tokenize(text: string, wordLevel: boolean): string[] {
+    if (wordLevel) return text.split(/(\s+)/);
+    return text.split('\n').flatMap((line, i, arr) => i < arr.length - 1 ? [line, '\n'] : [line]);
+  }
+
+  function escape(s: string) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function renderDiff(ops: DiffOp[], wordLevel: boolean): string {
+    return ops.map(op => {
+      const t = wordLevel ? escape(op.text) : escape(op.text).replace(/\n/g, '<br>');
+      if (op.op === 'del') return `<del>${t}</del>`;
+      if (op.op === 'ins') return `<ins>${t}</ins>`;
+      return t;
+    }).join('');
+  }
+
+  const leftEl = document.getElementById('diff-left') as HTMLTextAreaElement;
+  const rightEl = document.getElementById('diff-right') as HTMLTextAreaElement;
+  const output = document.getElementById('diff-output') as HTMLElement;
+  const wordLevelEl = document.getElementById('diff-word-level') as HTMLInputElement;
+
+  document.getElementById('diff-run')!.addEventListener('click', () => {
+    const wordLevel = wordLevelEl.checked;
+    const a = tokenize(leftEl.value, wordLevel);
+    const b = tokenize(rightEl.value, wordLevel);
+    const ops = diff(a, b);
+    const delCount = ops.filter(o => o.op === 'del').length;
+    const insCount = ops.filter(o => o.op === 'ins').length;
+    output.innerHTML = `<p class="diff-meta mono">${delCount} deletion(s) · ${insCount} insertion(s)</p><div class="diff-text">${renderDiff(ops, wordLevel)}</div>`;
+  });
+
+  document.getElementById('diff-clear')!.addEventListener('click', () => {
+    leftEl.value = '';
+    rightEl.value = '';
+    output.innerHTML = '<span class="hint mono">click compare to see the diff</span>';
+  });
+</script>
+
 <style>
   .tool { padding-block: 0 2rem; }
+  .tool.wide { max-width: none; }
   .back { font-size: 12px; margin: 0 0 2rem; }
   .back a { color: var(--muted); text-decoration: none; }
   .back a:hover { color: var(--ink); }
   .h1 { font-family: var(--font-display); font-weight: 600; font-size: clamp(1.75rem, 4vw, 2.5rem); margin: 0 0 0.5rem; line-height: 1.1; }
   .status { font-size: 11px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin: 0 0 2rem; }
   .status.ready { color: var(--accent); }
-  .lede { font-size: 1rem; color: var(--muted); line-height: 1.6; max-width: 56ch; }
-  .placeholder { max-width: 60ch; }
-  .placeholder p { color: var(--muted); margin: 0 0 1rem; }
+
+  .inputs-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  @media (min-width: 700px) { .inputs-row { grid-template-columns: 1fr 1fr; } }
+
+  .pane-label { font-size: 10px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 0.5rem; }
+
   .io {
     width: 100%;
     padding: 1rem;
@@ -33,6 +132,44 @@ import BaseLayout from '~/layouts/BaseLayout.astro'
     font-family: var(--font-mono);
     font-size: 0.875rem;
     resize: vertical;
+    min-height: 200px;
   }
-  .hint { font-size: 11px; color: var(--muted); margin-top: 0.75rem; }
+
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+    margin: 1rem 0;
+  }
+  .btn {
+    padding: 0.375rem 1rem;
+    background: var(--paper-2);
+    border: 1px solid var(--rule);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    cursor: pointer;
+    transition: background 100ms;
+  }
+  .btn:hover { background: var(--accent); color: var(--paper); border-color: var(--accent); }
+
+  .toggle-label { font-family: var(--font-mono); font-size: 0.8125rem; color: var(--muted); display: flex; align-items: center; gap: 0.4rem; cursor: pointer; }
+
+  .diff-output {
+    padding: 1.25rem;
+    background: var(--paper-2);
+    border: 1px solid var(--rule);
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-word;
+    min-height: 80px;
+  }
+  .diff-output del { background: #ffd7d5; color: #a00; text-decoration: line-through; border-radius: 2px; padding: 0 1px; }
+  .diff-output ins { background: #d4f0c4; color: #1a6600; text-decoration: none; border-radius: 2px; padding: 0 1px; }
+  .diff-meta { font-size: 11px; color: var(--muted); margin: 0 0 0.75rem; }
+  .diff-text { white-space: pre-wrap; }
+  .hint { color: var(--muted); font-size: 0.875rem; }
 </style>

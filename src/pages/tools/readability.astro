@@ -1,0 +1,172 @@
+---
+import BaseLayout from '~/layouts/BaseLayout.astro'
+---
+<BaseLayout title="Readability Score — Oriz Text Tools" description="Get Flesch-Kincaid reading ease and grade level for any text. All client-side.">
+  <article class="tool">
+    <p class="back mono"><a href="/">← all tools</a></p>
+    <h1 class="h1">readability score</h1>
+    <p class="status mono ready">ready · v0.1</p>
+
+    <div class="layout">
+      <div class="input-pane">
+        <label class="pane-label mono" for="read-input">input</label>
+        <textarea id="read-input" class="io" rows="16" placeholder="paste text here…" spellcheck="true"></textarea>
+      </div>
+      <div class="output-pane">
+        <div class="pane-label mono">scores</div>
+
+        <div class="score-card">
+          <div class="score-header">
+            <span class="score-name">Flesch Reading Ease</span>
+            <span class="score-value mono" id="fre-score">—</span>
+          </div>
+          <div class="score-bar-track"><div class="score-bar" id="fre-bar"></div></div>
+          <span class="score-label" id="fre-label">—</span>
+          <p class="score-desc">100 = very easy, 0 = very hard. Aim for 60–70 for general audience.</p>
+        </div>
+
+        <div class="score-card">
+          <div class="score-header">
+            <span class="score-name">Flesch-Kincaid Grade</span>
+            <span class="score-value mono" id="fkg-score">—</span>
+          </div>
+          <p class="score-desc">Approximate US school grade level required to understand the text.</p>
+        </div>
+
+        <div class="score-card">
+          <div class="score-header">
+            <span class="score-name">Gunning Fog Index</span>
+            <span class="score-value mono" id="fog-score">—</span>
+          </div>
+          <p class="score-desc">Years of formal education needed. Below 12 = accessible, 17+ = very hard.</p>
+        </div>
+
+        <div class="stats-mini">
+          <span class="mono" id="r-words">— words</span>
+          <span class="mono" id="r-sentences">— sentences</span>
+          <span class="mono" id="r-syllables">— syllables</span>
+          <span class="mono" id="r-complex">— complex words</span>
+        </div>
+      </div>
+    </div>
+  </article>
+</BaseLayout>
+
+<script>
+  // Rough syllable counter (English)
+  function countSyllables(word: string): number {
+    word = word.toLowerCase().replace(/[^a-z]/g, '');
+    if (word.length <= 3) return 1;
+    word = word.replace(/(?:[^laeiouy]es|ed|[^laeiouy]e)$/, '');
+    word = word.replace(/^y/, '');
+    const m = word.match(/[aeiouy]{1,2}/g);
+    return m ? m.length : 1;
+  }
+
+  // Complex word: 3+ syllables, not proper noun, not compound
+  function isComplex(word: string): boolean {
+    const clean = word.replace(/[^a-zA-Z]/g, '');
+    if (!clean) return false;
+    return countSyllables(clean) >= 3;
+  }
+
+  const FRE_LEVELS = [
+    { min: 90, label: 'Very Easy' },
+    { min: 80, label: 'Easy' },
+    { min: 70, label: 'Fairly Easy' },
+    { min: 60, label: 'Standard' },
+    { min: 50, label: 'Fairly Difficult' },
+    { min: 30, label: 'Difficult' },
+    { min: 0,  label: 'Very Confusing' },
+  ];
+
+  function classify(score: number) {
+    return FRE_LEVELS.find(l => score >= l.min)?.label ?? 'Very Confusing';
+  }
+
+  const inputEl = document.getElementById('read-input') as HTMLTextAreaElement;
+
+  function analyze(text: string) {
+    const sentences = (text.match(/[^.!?]+[.!?]+/g) ?? []).length || 1;
+    const wordMatches = text.match(/\b[a-zA-Z']+\b/g) ?? [];
+    const words = wordMatches.length || 1;
+    const syllables = wordMatches.reduce((s, w) => s + countSyllables(w), 0);
+    const complexWords = wordMatches.filter(isComplex).length;
+
+    const fre = 206.835 - 1.015 * (words / sentences) - 84.6 * (syllables / words);
+    const fkg = 0.39 * (words / sentences) + 11.8 * (syllables / words) - 15.59;
+    const fog = 0.4 * ((words / sentences) + 100 * (complexWords / words));
+
+    (document.getElementById('fre-score') as HTMLElement).textContent = fre.toFixed(1);
+    (document.getElementById('fkg-score') as HTMLElement).textContent = fkg.toFixed(1);
+    (document.getElementById('fog-score') as HTMLElement).textContent = fog.toFixed(1);
+
+    const clamped = Math.max(0, Math.min(100, fre));
+    (document.getElementById('fre-bar') as HTMLElement).style.width = `${clamped}%`;
+    (document.getElementById('fre-label') as HTMLElement).textContent = classify(fre);
+
+    (document.getElementById('r-words') as HTMLElement).textContent = `${words} words`;
+    (document.getElementById('r-sentences') as HTMLElement).textContent = `${sentences} sentences`;
+    (document.getElementById('r-syllables') as HTMLElement).textContent = `${syllables} syllables`;
+    (document.getElementById('r-complex') as HTMLElement).textContent = `${complexWords} complex words`;
+  }
+
+  inputEl.addEventListener('input', () => {
+    const text = inputEl.value.trim();
+    if (text.split(/\s+/).length < 3) {
+      ['fre-score','fkg-score','fog-score','fre-label'].forEach(id => {
+        (document.getElementById(id) as HTMLElement).textContent = '—';
+      });
+      (document.getElementById('fre-bar') as HTMLElement).style.width = '0%';
+      return;
+    }
+    analyze(text);
+  });
+</script>
+
+<style>
+  .tool { padding-block: 0 2rem; }
+  .back { font-size: 12px; margin: 0 0 2rem; }
+  .back a { color: var(--muted); text-decoration: none; }
+  .back a:hover { color: var(--ink); }
+  .h1 { font-family: var(--font-display); font-weight: 600; font-size: clamp(1.75rem, 4vw, 2.5rem); margin: 0 0 0.5rem; line-height: 1.1; }
+  .status { font-size: 11px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin: 0 0 2rem; }
+  .status.ready { color: var(--accent); }
+  .pane-label { font-size: 10px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 0.5rem; display: block; }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+  @media (min-width: 700px) { .layout { grid-template-columns: 1fr 1fr; align-items: start; } }
+
+  .io {
+    width: 100%;
+    padding: 1rem;
+    background: var(--paper-2);
+    border: 1px solid var(--rule);
+    color: var(--ink);
+    font-family: var(--font-display);
+    font-size: 1rem;
+    line-height: 1.7;
+    resize: vertical;
+    min-height: 280px;
+  }
+
+  .score-card {
+    background: var(--paper-2);
+    border: 1px solid var(--rule);
+    padding: 1rem;
+    margin-bottom: 1rem;
+  }
+  .score-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.5rem; }
+  .score-name { font-size: 0.9375rem; font-weight: 500; }
+  .score-value { font-size: 1.5rem; color: var(--accent); font-weight: 500; }
+  .score-bar-track { height: 6px; background: var(--rule); border-radius: 3px; margin-bottom: 0.4rem; }
+  .score-bar { height: 100%; background: var(--accent); border-radius: 3px; transition: width 300ms; width: 0%; }
+  .score-label { font-family: var(--font-mono); font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.08em; }
+  .score-desc { font-size: 0.8rem; color: var(--muted); margin: 0.4rem 0 0; line-height: 1.5; }
+
+  .stats-mini { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; font-size: 11px; color: var(--muted); font-family: var(--font-mono); margin-top: 0.5rem; }
+</style>

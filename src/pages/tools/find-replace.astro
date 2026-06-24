@@ -1,0 +1,163 @@
+---
+import BaseLayout from '~/layouts/BaseLayout.astro'
+---
+<BaseLayout title="Find & Replace — Oriz Text Tools" description="Find and replace text with optional regex support. All client-side.">
+  <article class="tool">
+    <p class="back mono"><a href="/">← all tools</a></p>
+    <h1 class="h1">find &amp; replace</h1>
+    <p class="status mono ready">ready · v0.1</p>
+
+    <div class="layout">
+      <div class="left-pane">
+        <div class="control-row">
+          <div class="field">
+            <label class="pane-label mono" for="fnr-find">find</label>
+            <input id="fnr-find" type="text" class="text-input" placeholder="search pattern…" spellcheck="false" />
+          </div>
+          <div class="field">
+            <label class="pane-label mono" for="fnr-replace">replace with</label>
+            <input id="fnr-replace" type="text" class="text-input" placeholder="replacement…" spellcheck="false" />
+          </div>
+        </div>
+        <div class="flags-row">
+          <label class="flag-label"><input type="checkbox" id="fnr-regex" /> regex</label>
+          <label class="flag-label"><input type="checkbox" id="fnr-case" /> case sensitive</label>
+          <label class="flag-label"><input type="checkbox" id="fnr-global" checked /> replace all</label>
+          <label class="flag-label"><input type="checkbox" id="fnr-multiline" /> multiline (^$)</label>
+        </div>
+        <div class="btn-row">
+          <button class="btn" id="fnr-run">replace</button>
+          <span id="fnr-match-count" class="hint mono"></span>
+        </div>
+        <label class="pane-label mono" for="fnr-input" style="margin-top:1rem;">input</label>
+        <textarea id="fnr-input" class="io" rows="14" placeholder="paste text here…" spellcheck="false"></textarea>
+      </div>
+      <div class="right-pane">
+        <div class="pane-label mono">output <span id="fnr-error" class="error-badge"></span></div>
+        <textarea id="fnr-output" class="io" rows="14" readonly placeholder="result appears here…"></textarea>
+        <button class="copy-btn" id="fnr-copy">copy</button>
+      </div>
+    </div>
+  </article>
+</BaseLayout>
+
+<script>
+  const findEl = document.getElementById('fnr-find') as HTMLInputElement;
+  const replaceEl = document.getElementById('fnr-replace') as HTMLInputElement;
+  const inputEl = document.getElementById('fnr-input') as HTMLTextAreaElement;
+  const outputEl = document.getElementById('fnr-output') as HTMLTextAreaElement;
+  const regexEl = document.getElementById('fnr-regex') as HTMLInputElement;
+  const caseEl = document.getElementById('fnr-case') as HTMLInputElement;
+  const globalEl = document.getElementById('fnr-global') as HTMLInputElement;
+  const multilineEl = document.getElementById('fnr-multiline') as HTMLInputElement;
+  const matchCount = document.getElementById('fnr-match-count') as HTMLElement;
+  const errorBadge = document.getElementById('fnr-error') as HTMLElement;
+  const copyBtn = document.getElementById('fnr-copy') as HTMLButtonElement;
+
+  function run() {
+    errorBadge.textContent = '';
+    matchCount.textContent = '';
+    const text = inputEl.value;
+    const find = findEl.value;
+    const replacement = replaceEl.value;
+    if (!find) { outputEl.value = text; return; }
+
+    try {
+      let flags = '';
+      if (!caseEl.checked) flags += 'i';
+      if (globalEl.checked) flags += 'g';
+      if (multilineEl.checked) flags += 'm';
+
+      const pattern = regexEl.checked ? new RegExp(find, flags) : new RegExp(find.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), flags);
+      const matches = [...text.matchAll(new RegExp(pattern.source, pattern.flags + (flags.includes('g') ? '' : 'g')))];
+      matchCount.textContent = `${matches.length} match(es)`;
+      outputEl.value = text.replace(pattern, replacement);
+    } catch (e: unknown) {
+      errorBadge.textContent = e instanceof Error ? e.message : String(e);
+      outputEl.value = text;
+    }
+  }
+
+  document.getElementById('fnr-run')!.addEventListener('click', run);
+  [findEl, replaceEl, regexEl, caseEl, globalEl, multilineEl].forEach(el => el.addEventListener('change', () => {}));
+  inputEl.addEventListener('input', run);
+  findEl.addEventListener('input', run);
+  replaceEl.addEventListener('input', run);
+
+  copyBtn.addEventListener('click', async () => {
+    if (!outputEl.value) return;
+    await navigator.clipboard.writeText(outputEl.value);
+    copyBtn.textContent = 'copied!';
+    setTimeout(() => { copyBtn.textContent = 'copy'; }, 1500);
+  });
+</script>
+
+<style>
+  .tool { padding-block: 0 2rem; }
+  .back { font-size: 12px; margin: 0 0 2rem; }
+  .back a { color: var(--muted); text-decoration: none; }
+  .back a:hover { color: var(--ink); }
+  .h1 { font-family: var(--font-display); font-weight: 600; font-size: clamp(1.75rem, 4vw, 2.5rem); margin: 0 0 0.5rem; line-height: 1.1; }
+  .status { font-size: 11px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin: 0 0 2rem; }
+  .status.ready { color: var(--accent); }
+  .pane-label { font-size: 10px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 0.4rem; display: block; }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+  @media (min-width: 700px) { .layout { grid-template-columns: 1fr 1fr; align-items: start; } }
+
+  .control-row { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 0.75rem; }
+  .field { display: flex; flex-direction: column; }
+  .text-input {
+    padding: 0.375rem 0.75rem;
+    background: var(--paper-2);
+    border: 1px solid var(--rule);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+  }
+  .flags-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 0.75rem; }
+  .flag-label { font-family: var(--font-mono); font-size: 0.8125rem; color: var(--muted); display: flex; align-items: center; gap: 0.3rem; cursor: pointer; }
+  .btn-row { display: flex; align-items: center; gap: 0.75rem; }
+  .btn {
+    padding: 0.375rem 1rem;
+    background: var(--accent);
+    border: 1px solid var(--accent);
+    color: var(--paper);
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: opacity 100ms;
+  }
+  .btn:hover { opacity: 0.85; }
+  .hint { font-size: 11px; color: var(--muted); font-family: var(--font-mono); }
+  .error-badge { color: #c00; font-size: 10px; font-family: var(--font-mono); }
+
+  .io {
+    width: 100%;
+    padding: 1rem;
+    background: var(--paper-2);
+    border: 1px solid var(--rule);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    resize: vertical;
+    min-height: 240px;
+  }
+
+  .copy-btn {
+    margin-top: 0.5rem;
+    padding: 0.375rem 1rem;
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    cursor: pointer;
+    transition: background 100ms, color 100ms;
+  }
+  .copy-btn:hover { background: var(--accent); color: var(--paper); }
+</style>

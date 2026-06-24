@@ -1,17 +1,256 @@
 ---
 import BaseLayout from '~/layouts/BaseLayout.astro'
 ---
-<BaseLayout title="LaTeX equation renderer — Oriz Text Tools" description="LaTeX equation renderer — runs in your browser. Part of Oriz Text Tools.">
+<BaseLayout title="LaTeX equation preview — Oriz Text Tools" description="Preview LaTeX-style equations rendered with MathML in your browser. No server, no MathJax.">
   <article class="tool">
     <p class="back mono"><a href="/">← all tools</a></p>
-    <h1 class="h1">LaTeX equation renderer</h1>
-    <p class="status mono">coming · v0.1</p>
-    <p class="lede">
-      This feature is on the v0.1 roadmap. The page exists so we can iterate on
-      the design and copy in parallel; the implementation lands next sprint.
-    </p>
+    <h1 class="h1">LaTeX equation preview</h1>
+    <p class="status mono ready">ready · v0.1</p>
+    <p class="lede">Live preview of a useful subset of LaTeX math, rendered as native MathML — so your browser draws it directly. Supports fractions, roots, super/sub-scripts, sums, integrals, Greek letters, and common operators.</p>
+
+    <div class="layout">
+      <div class="pane">
+        <label class="pane-label mono" for="lx-input">LaTeX</label>
+        <textarea id="lx-input" class="io" rows="14" spellcheck="false">\\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}
+
+\\sum_{i=1}^{n} i^2 = \\frac{n(n+1)(2n+1)}{6}
+
+\\int_0^\\infty e^{-x^2} dx = \\frac{\\sqrt{\\pi}}{2}
+
+e^{i\\pi} + 1 = 0</textarea>
+      </div>
+      <div class="pane">
+        <div class="pane-label mono">preview</div>
+        <div id="lx-output" class="io preview" aria-live="polite"></div>
+        <p id="lx-error" class="err mono" hidden></p>
+      </div>
+    </div>
+    <p class="hint mono">Tip: separate equations with blank lines. Inline math also OK.</p>
   </article>
 </BaseLayout>
+
+<script>
+  const GREEK: Record<string, string> = {
+    alpha: 'α', beta: 'β', gamma: 'γ', delta: 'δ', epsilon: 'ε', varepsilon: 'ε',
+    zeta: 'ζ', eta: 'η', theta: 'θ', vartheta: 'ϑ', iota: 'ι', kappa: 'κ',
+    lambda: 'λ', mu: 'μ', nu: 'ν', xi: 'ξ', omicron: 'ο', pi: 'π', varpi: 'ϖ',
+    rho: 'ρ', varrho: 'ϱ', sigma: 'σ', varsigma: 'ς', tau: 'τ', upsilon: 'υ',
+    phi: 'φ', varphi: 'ϕ', chi: 'χ', psi: 'ψ', omega: 'ω',
+    Alpha: 'Α', Beta: 'Β', Gamma: 'Γ', Delta: 'Δ', Epsilon: 'Ε', Zeta: 'Ζ',
+    Eta: 'Η', Theta: 'Θ', Iota: 'Ι', Kappa: 'Κ', Lambda: 'Λ', Mu: 'Μ', Nu: 'Ν',
+    Xi: 'Ξ', Omicron: 'Ο', Pi: 'Π', Rho: 'Ρ', Sigma: 'Σ', Tau: 'Τ', Upsilon: 'Υ',
+    Phi: 'Φ', Chi: 'Χ', Psi: 'Ψ', Omega: 'Ω',
+  };
+  const SYMS: Record<string, string> = {
+    infty: '∞', pm: '±', mp: '∓', times: '×', cdot: '·', div: '÷',
+    le: '≤', leq: '≤', ge: '≥', geq: '≥', ne: '≠', neq: '≠', approx: '≈',
+    equiv: '≡', sim: '∼', propto: '∝', to: '→', rightarrow: '→', leftarrow: '←',
+    Rightarrow: '⇒', Leftarrow: '⇐', leftrightarrow: '↔',
+    sum: '∑', prod: '∏', int: '∫', oint: '∮',
+    partial: '∂', nabla: '∇', forall: '∀', exists: '∃', in: '∈', notin: '∉',
+    subset: '⊂', supset: '⊃', cup: '∪', cap: '∩', emptyset: '∅',
+    cdots: '⋯', ldots: '…', dots: '…',
+    ',': ' ', ';': ' ', ' ': ' ', '\\': '\\',
+  };
+
+  type Tok =
+    | { t: 'sym'; v: string }
+    | { t: 'num'; v: string }
+    | { t: 'id'; v: string }
+    | { t: 'op'; v: string }
+    | { t: 'cmd'; v: string }
+    | { t: 'lbrace' } | { t: 'rbrace' }
+    | { t: 'caret' } | { t: 'under' };
+
+  function tokenize(src: string): Tok[] {
+    const toks: Tok[] = [];
+    let i = 0;
+    while (i < src.length) {
+      const c = src[i];
+      if (/\s/.test(c)) { i++; continue; }
+      if (c === '\\') {
+        let j = i + 1;
+        if (j < src.length && /[a-zA-Z]/.test(src[j])) {
+          while (j < src.length && /[a-zA-Z]/.test(src[j])) j++;
+          toks.push({ t: 'cmd', v: src.slice(i + 1, j) });
+          i = j; continue;
+        }
+        // single-char command (e.g. \,)
+        toks.push({ t: 'cmd', v: src[j] ?? '' });
+        i = j + 1; continue;
+      }
+      if (c === '{') { toks.push({ t: 'lbrace' }); i++; continue; }
+      if (c === '}') { toks.push({ t: 'rbrace' }); i++; continue; }
+      if (c === '^') { toks.push({ t: 'caret' }); i++; continue; }
+      if (c === '_') { toks.push({ t: 'under' }); i++; continue; }
+      if (/[0-9]/.test(c)) {
+        let j = i;
+        while (j < src.length && /[0-9.]/.test(src[j])) j++;
+        toks.push({ t: 'num', v: src.slice(i, j) });
+        i = j; continue;
+      }
+      if (/[a-zA-Z]/.test(c)) {
+        toks.push({ t: 'id', v: c });
+        i++; continue;
+      }
+      if (/[+\-*/=<>()\[\]|!.,;:]/.test(c)) {
+        toks.push({ t: 'op', v: c });
+        i++; continue;
+      }
+      toks.push({ t: 'sym', v: c });
+      i++;
+    }
+    return toks;
+  }
+
+  function esc(s: string): string {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  // Parses tokens[pos..] into MathML, stopping at rbrace (depth-aware) or end.
+  function parse(toks: Tok[], pos: { i: number }, untilBrace: boolean): string {
+    let out = '';
+    while (pos.i < toks.length) {
+      const tk = toks[pos.i];
+      if (tk.t === 'rbrace') {
+        if (untilBrace) { pos.i++; return out; }
+        pos.i++; continue;
+      }
+      pos.i++;
+      let atom = '';
+      if (tk.t === 'num') atom = `<mn>${esc(tk.v)}</mn>`;
+      else if (tk.t === 'id') atom = `<mi>${esc(tk.v)}</mi>`;
+      else if (tk.t === 'op') atom = /[+\-=<>]/.test(tk.v) ? `<mo>${esc(tk.v)}</mo>` : `<mo>${esc(tk.v)}</mo>`;
+      else if (tk.t === 'sym') atom = `<mo>${esc(tk.v)}</mo>`;
+      else if (tk.t === 'lbrace') {
+        const inner = parse(toks, pos, true);
+        atom = `<mrow>${inner}</mrow>`;
+      } else if (tk.t === 'cmd') {
+        if (tk.v === 'frac') {
+          const a = parseGroup(toks, pos);
+          const b = parseGroup(toks, pos);
+          atom = `<mfrac>${a}${b}</mfrac>`;
+        } else if (tk.v === 'sqrt') {
+          const a = parseGroup(toks, pos);
+          atom = `<msqrt>${a}</msqrt>`;
+        } else if (tk.v in GREEK) {
+          atom = `<mi>${GREEK[tk.v]}</mi>`;
+        } else if (tk.v in SYMS) {
+          atom = `<mo>${SYMS[tk.v]}</mo>`;
+        } else if (tk.v === 'left' || tk.v === 'right') {
+          // consume the delimiter token if any
+          if (pos.i < toks.length) {
+            const d = toks[pos.i];
+            if (d.t === 'op' || d.t === 'sym') {
+              pos.i++;
+              atom = `<mo>${esc(d.v)}</mo>`;
+            }
+          }
+        } else if (tk.v === 'text' || tk.v === 'mathrm' || tk.v === 'mathbf' || tk.v === 'mathit') {
+          const a = parseGroup(toks, pos);
+          atom = `<mrow>${a}</mrow>`;
+        } else {
+          // unknown command — render as literal
+          atom = `<mi>${esc(tk.v)}</mi>`;
+        }
+      } else if (tk.t === 'caret') {
+        const sup = parseGroup(toks, pos);
+        out = wrapScript(out, sup, 'sup');
+        continue;
+      } else if (tk.t === 'under') {
+        const sub = parseGroup(toks, pos);
+        out = wrapScript(out, sub, 'sub');
+        continue;
+      }
+      // lookahead: ^ or _ binds to atom
+      while (pos.i < toks.length && (toks[pos.i].t === 'caret' || toks[pos.i].t === 'under')) {
+        const which = toks[pos.i].t;
+        pos.i++;
+        const part = parseGroup(toks, pos);
+        if (which === 'caret') {
+          if (pos.i < toks.length && toks[pos.i].t === 'under') {
+            pos.i++;
+            const sub = parseGroup(toks, pos);
+            atom = `<msubsup>${atom}${sub}${part}</msubsup>`;
+          } else {
+            atom = `<msup>${atom}${part}</msup>`;
+          }
+        } else {
+          if (pos.i < toks.length && toks[pos.i].t === 'caret') {
+            pos.i++;
+            const sup = parseGroup(toks, pos);
+            atom = `<msubsup>${atom}${part}${sup}</msubsup>`;
+          } else {
+            atom = `<msub>${atom}${part}</msub>`;
+          }
+        }
+      }
+      out += atom;
+    }
+    return out;
+  }
+
+  function wrapScript(prev: string, part: string, kind: 'sup' | 'sub'): string {
+    // edge case: ^/_ with empty prev — wrap in invisible base
+    const base = prev || '<mi></mi>';
+    const tag = kind === 'sup' ? 'msup' : 'msub';
+    return `<${tag}>${base}${part}</${tag}>`;
+  }
+
+  function parseGroup(toks: Tok[], pos: { i: number }): string {
+    if (pos.i >= toks.length) return '<mrow></mrow>';
+    const tk = toks[pos.i];
+    if (tk.t === 'lbrace') {
+      pos.i++;
+      const inner = parse(toks, pos, true);
+      return `<mrow>${inner}</mrow>`;
+    }
+    pos.i++;
+    if (tk.t === 'num') return `<mn>${esc(tk.v)}</mn>`;
+    if (tk.t === 'id') return `<mi>${esc(tk.v)}</mi>`;
+    if (tk.t === 'cmd') {
+      if (tk.v in GREEK) return `<mi>${GREEK[tk.v]}</mi>`;
+      if (tk.v in SYMS) return `<mo>${SYMS[tk.v]}</mo>`;
+      if (tk.v === 'frac') {
+        const a = parseGroup(toks, pos);
+        const b = parseGroup(toks, pos);
+        return `<mfrac>${a}${b}</mfrac>`;
+      }
+      if (tk.v === 'sqrt') {
+        const a = parseGroup(toks, pos);
+        return `<msqrt>${a}</msqrt>`;
+      }
+      return `<mi>${esc(tk.v)}</mi>`;
+    }
+    if (tk.t === 'op' || tk.t === 'sym') return `<mo>${esc(tk.v)}</mo>`;
+    return '<mrow></mrow>';
+  }
+
+  function toMathML(src: string): string {
+    const toks = tokenize(src);
+    const body = parse(toks, { i: 0 }, false);
+    return `<math xmlns="http://www.w3.org/1998/Math/MathML" display="block">${body}</math>`;
+  }
+
+  const input = document.getElementById('lx-input') as HTMLTextAreaElement;
+  const out = document.getElementById('lx-output') as HTMLElement;
+  const err = document.getElementById('lx-error') as HTMLElement;
+
+  function render() {
+    err.hidden = true;
+    try {
+      const blocks = input.value.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean);
+      if (blocks.length === 0) { out.innerHTML = '<p class="placeholder mono">type some LaTeX</p>'; return; }
+      out.innerHTML = blocks.map(toMathML).join('');
+    } catch (e) {
+      err.hidden = false;
+      err.textContent = (e as Error).message;
+    }
+  }
+
+  input.addEventListener('input', render);
+  render();
+</script>
 
 <style>
   .tool { padding-block: 0 2rem; }
@@ -19,20 +258,16 @@ import BaseLayout from '~/layouts/BaseLayout.astro'
   .back a { color: var(--muted); text-decoration: none; }
   .back a:hover { color: var(--ink); }
   .h1 { font-family: var(--font-display); font-weight: 600; font-size: clamp(1.75rem, 4vw, 2.5rem); margin: 0 0 0.5rem; line-height: 1.1; }
-  .status { font-size: 11px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin: 0 0 2rem; }
+  .status { font-size: 11px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin: 0 0 1rem; }
   .status.ready { color: var(--accent); }
-  .lede { font-size: 1rem; color: var(--muted); line-height: 1.6; max-width: 56ch; }
-  .placeholder { max-width: 60ch; }
-  .placeholder p { color: var(--muted); margin: 0 0 1rem; }
-  .io {
-    width: 100%;
-    padding: 1rem;
-    background: var(--paper-2);
-    border: 1px solid var(--rule);
-    color: var(--ink);
-    font-family: var(--font-mono);
-    font-size: 0.875rem;
-    resize: vertical;
-  }
+  .lede { font-size: 1rem; color: var(--muted); line-height: 1.6; max-width: 60ch; margin: 0 0 2rem; }
+  .layout { display: grid; grid-template-columns: 1fr; gap: 1.5rem; }
+  @media (min-width: 800px) { .layout { grid-template-columns: 1fr 1fr; align-items: start; } }
+  .pane-label { font-size: 10px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 0.5rem; display: block; }
+  .io { width: 100%; padding: 1rem; background: var(--paper-2); border: 1px solid var(--rule); color: var(--ink); font-family: var(--font-mono); font-size: 0.875rem; box-sizing: border-box; resize: vertical; }
+  .preview { min-height: 240px; font-family: var(--font-body); font-size: 1.05rem; line-height: 1.8; }
+  .preview math { display: block; margin: 0.75rem 0; }
+  .placeholder { color: var(--muted); }
   .hint { font-size: 11px; color: var(--muted); margin-top: 0.75rem; }
+  .err { color: #c1440e; font-size: 12px; margin-top: 0.5rem; }
 </style>
